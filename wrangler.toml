@@ -1,0 +1,10 @@
+name = "sideinstaller"
+main = "src/worker.js"
+compatibility_date = "2025-01-01"
+
+# Static assets (HTML, CSS-in-HTML, JS-in-HTML, PNG, mobileconfig, plists)
+[assets]
+directory = "./public"
+binding = "ASSETS"
+# Not found → fall through to Worker (optional)
+not_found_handling = "none"
