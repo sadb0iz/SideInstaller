@@ -333,6 +333,49 @@
   .empty{display:none; text-align:center; color:var(--muted); padding:50px 0; font-size:15px}
   .empty.show{display:block}
 
+  /* ---- sign progress modal ----
+     Shown after tapping Install on a certificate: the IPA is signed with that
+     certificate on GitHub Actions (zsign), then the install manifest (plist)
+     is built and the iOS installer opens automatically. */
+  .sign-cert{margin:0 0 14px; color:var(--muted); font-size:14px}
+  .sign-cert b{color:var(--text)}
+  .sign-steps{list-style:none; margin:0 0 14px; padding:0; display:flex; flex-direction:column; gap:10px}
+  .sign-step{
+    display:flex; align-items:center; gap:12px; padding:12px 14px;
+    font-size:14px; color:var(--faint);
+    background:var(--card); border:1px solid var(--stroke); border-radius:var(--radius-sm);
+  }
+  .sign-step small{color:var(--faint); font-size:12px}
+  .sign-step b{color:inherit}
+  .sign-step .st{
+    flex:none; width:22px; height:22px; display:grid; place-items:center;
+    border-radius:999px; border:2px solid var(--stroke-strong);
+  }
+  .sign-step.active{color:var(--text); border-color:rgba(77,173,255,.5)}
+  .sign-step.active .st{border-color:var(--accent2); border-top-color:transparent; animation:sign-spin .9s linear infinite}
+  .sign-step.done{color:var(--muted)}
+  .sign-step.done .st{border-color:var(--good); border-top-color:var(--good); background:rgba(52,211,153,.15); color:var(--good); animation:none}
+  .sign-step.done .st::after{content:"✓"; font-size:12px; font-weight:800}
+  .sign-step.error{color:var(--bad); border-color:rgba(248,113,113,.45)}
+  .sign-step.error .st{border-color:var(--bad); border-top-color:var(--bad); color:var(--bad); animation:none}
+  .sign-step.error .st::after{content:"!"; font-size:13px; font-weight:800}
+  @keyframes sign-spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion:reduce){
+    .sign-step.active .st{animation:none; border-top-color:var(--accent2)}
+  }
+  .sign-note{margin:0; color:var(--muted); font-size:13.5px; min-height:22px}
+  .sign-actions{display:flex; flex-direction:column; gap:10px; margin-top:14px}
+  .sign-actions[hidden]{display:none}
+  .sign-actions .install-btn{margin-top:0}
+  #signRetry{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding:12px 16px; font-size:14px; font-weight:700; font-family:inherit;
+    color:var(--text); background:var(--card); border:1px solid var(--stroke-strong);
+    border-radius:var(--radius-btn); cursor:pointer;
+  }
+  #signRetry[hidden]{display:none}
+  #signRetry:hover{background:var(--card-hover)}
+
   /* ---- how-to ---- */
   details.howto{
     margin-top:14px; background:var(--card); border:1px solid var(--stroke);
@@ -434,6 +477,7 @@
       <span class="step-num">2</span>
       <div>
         <h2 class="step-title">Installation</h2>
+        <p class="step-sub">Tap <b>Install</b> on any certificate — <b>Feather.ipa</b> is signed with it automatically.</p>
       </div>
     </div>
 
@@ -465,8 +509,9 @@
       <div class="howto-body">
         <ol>
           <li>Open this page <b>on your iPhone or iPad in Safari</b>.</li>
-          <li>Pick any certificate above and tap <b>Install</b>, then confirm the prompt.</li>
-          <li>Wait for the app to finish installing on your Home Screen.</li>
+          <li>Pick any certificate above and tap <b>Install</b>.</li>
+          <li><b>Signing happens automatically:</b> <code>feather/Feather.ipa</code> is signed with the certificate you picked using zsign on GitHub Actions (zsign can't run on Cloudflare Workers, so the heavy work happens there), then the install manifest is built — you just wait and watch the progress.</li>
+          <li>When the manifest is ready, the iOS installer opens by itself. Confirm the prompt and wait for the app on your Home Screen.</li>
           <li>Go to <code>Settings → General → VPN &amp; Device Management</code>, tap the developer profile, and <b>Trust</b> it.</li>
           <li>Launch the app. If one certificate is revoked or won't open, just install with another.</li>
         </ol>
@@ -507,7 +552,7 @@
       </button>
       <h3 class="modal-title" id="tutorialTitle">Language</h3>
       <button type="button" class="modal-close" data-close aria-label="Close">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
 
@@ -544,6 +589,34 @@
       <div class="pane" data-step="2" hidden>
         <div class="videos" id="tutorialVideos"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sign progress modal: Install → auto sign (GitHub Actions + zsign) → manifest → itms-services -->
+<div class="modal" id="signModal" role="dialog" aria-modal="true" aria-labelledby="signTitle" hidden>
+  <div class="modal-backdrop" data-sign-close></div>
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3 class="modal-title" id="signTitle">Installing Feather</h3>
+      <button type="button" class="modal-close" data-sign-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <p class="sign-cert">Certificate: <b id="signCertName"></b></p>
+    <ol class="sign-steps" id="signSteps">
+      <li class="sign-step" data-step="request"><span class="st" aria-hidden="true"></span><span>Requesting sign job</span></li>
+      <li class="sign-step" data-step="sign"><span class="st" aria-hidden="true"></span><span>Signing <b>Feather.ipa</b> with this certificate <small>(zsign · GitHub Actions)</small></span></li>
+      <li class="sign-step" data-step="manifest"><span class="st" aria-hidden="true"></span><span>Creating install manifest (plist)</span></li>
+      <li class="sign-step" data-step="install"><span class="st" aria-hidden="true"></span><span>Opening the iOS installer</span></li>
+    </ol>
+    <p class="sign-note" id="signNote" aria-live="polite"></p>
+    <div class="sign-actions" id="signActions" hidden>
+      <a class="install-btn" id="signInstallNow" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 21h14"/></svg>
+        Install now
+      </a>
+      <button type="button" id="signRetry" hidden>Try again</button>
     </div>
   </div>
 </div>
@@ -604,7 +677,10 @@
     var a = document.createElement('a');
     a.className = 'install-btn';
     a.href = '#';
-    a.setAttribute('data-plist', c.plist || ('/output/sideinstaller-' + (c.name||'') + '.plist'));
+    /* The sign flow needs the certificate folder name (validated server-side
+       against certificates/index.json), not a static plist path. */
+    a.setAttribute('data-cert', c.folder || c.displayName || c.name || '');
+    a.setAttribute('data-label', c.displayName || c.name || '');
     a.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 21h14"/></svg> Install';
     art.appendChild(a);
     return art;
@@ -645,8 +721,6 @@
         });
         if(certCountEl) certCountEl.textContent = String(cards.length);
         apply();
-        // re-bind itms hrefs after dynamic insert
-        if(window.__siBindPlists) window.__siBindPlists();
       })
       .catch(function(err){
         console.error('Failed to load /api/certs', err);
@@ -852,28 +926,212 @@
 </script>
 
 <script>
+/* ---- Sign + Install flow ----
+   Tapping Install on any certificate card runs the whole pipeline:
+     1. POST /api/sign {cert} — the Worker validates the certificate against
+        certificates/index.json and dispatches the "Sign Feather IPA" GitHub
+        Actions workflow (zsign cannot run on Cloudflare Workers, so the
+        heavy signing work happens on a GitHub-hosted Ubuntu runner).
+     2. The workflow builds zsign, signs public/feather/Feather.ipa with the
+        certificate's .p12 + .mobileprovision, uploads the signed IPA to a
+        GitHub Release, and commits public/output/feather-<cert>.plist.
+     3. This page polls GET /api/sign-status?cert=... until the run succeeds
+        and the manifest is live, then opens
+        itms-services://?action=download-manifest&url=<manifest> automatically.
+   No PC, no manual signing, no pre-made IPA per certificate. */
 (function(){
-  function absPlist(path){
-    var origin = window.location.origin;
-    // ensure https for itms-services
-    if(origin.indexOf('http://')===0) origin = origin.replace('http://','https://');
-    return origin + path;
-  }
-  document.addEventListener('click', function(e){
-    var a = e.target.closest('a[data-plist]');
-    if(!a) return;
-    e.preventDefault();
-    var url = absPlist(a.getAttribute('data-plist'));
-    window.location.href = 'itms-services://?action=download-manifest&url=' + encodeURIComponent(url);
-  }, true);
-  function bindPlists(){
-    document.querySelectorAll('a[data-plist]').forEach(function(a){
-      var url = absPlist(a.getAttribute('data-plist'));
-      a.setAttribute('href', 'itms-services://?action=download-manifest&url=' + encodeURIComponent(url));
+  var POLL_MS = 10000;
+  var MAX_WAIT_MS = 30 * 60 * 1000;
+
+  var modal = document.getElementById('signModal');
+  var titleEl = document.getElementById('signTitle');
+  var certEl = document.getElementById('signCertName');
+  var noteEl = document.getElementById('signNote');
+  var stepsEl = document.getElementById('signSteps');
+  var actionsEl = document.getElementById('signActions');
+  var installBtn = document.getElementById('signInstallNow');
+  var retryBtn = document.getElementById('signRetry');
+
+  var ORDER = ['request','sign','manifest','install'];
+  var pollTimer = null;
+  var dead = false;
+  var currentCert = '', currentLabel = '';
+  var startedAt = 0, autoOpened = false;
+
+  function postJSON(url, data){
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+      cache: 'no-store'
+    }).then(function(r){
+      return r.json().then(function(j){
+        if(!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        return j;
+      });
     });
   }
-  window.__siBindPlists = bindPlists;
-  bindPlists();
+  function getJSON(url){
+    return fetch(url, { cache: 'no-store' }).then(function(r){
+      return r.json().then(function(j){
+        if(!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        return j;
+      });
+    });
+  }
+
+  function resetSteps(){
+    [].forEach.call(stepsEl.querySelectorAll('.sign-step'), function(li){
+      li.classList.remove('active','done','error');
+    });
+  }
+  function mark(key, cls){
+    var ki = ORDER.indexOf(key);
+    [].forEach.call(stepsEl.querySelectorAll('.sign-step'), function(li){
+      var k = li.getAttribute('data-step');
+      li.classList.remove('active','done','error');
+      if(k === key){ li.classList.add(cls); }
+      else if(ORDER.indexOf(k) < ki){ li.classList.add('done'); }
+    });
+  }
+  function note(t){ noteEl.textContent = t || ''; }
+  function elapsed(){
+    var s = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    var m = Math.floor(s / 60);
+    return (m > 0 ? m + 'm ' : '') + (s % 60) + 's';
+  }
+
+  function openModal(){
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal(){
+    dead = true;
+    clearTimeout(pollTimer);
+    modal.hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  function fail(msg){
+    [].forEach.call(stepsEl.querySelectorAll('.sign-step.active'), function(li){
+      li.classList.remove('active');
+      li.classList.add('error');
+    });
+    note(msg);
+    retryBtn.hidden = false;
+    actionsEl.hidden = false;
+  }
+
+  function finish(plistUrl){
+    mark('install', 'done');
+    note('Signed with "' + currentLabel + '". Opening the iOS installer…');
+    var itms = 'itms-services://?action=download-manifest&url=' + encodeURIComponent(plistUrl);
+    installBtn.setAttribute('href', itms);
+    retryBtn.hidden = true;
+    actionsEl.hidden = false;
+    if(!autoOpened){
+      autoOpened = true;
+      setTimeout(function(){ if(!dead) window.location.href = itms; }, 1500);
+    }
+  }
+
+  function poll(){
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(function(){
+      if(dead) return;
+      if(Date.now() - startedAt > MAX_WAIT_MS){
+        fail('Timed out waiting for the sign job (30 min). Please try again.');
+        return;
+      }
+      getJSON('/api/sign-status?cert=' + encodeURIComponent(currentCert)).then(function(res){
+        if(dead) return;
+        if(res.state === 'running'){
+          note('Signing Feather.ipa with zsign… (' + elapsed() + ' elapsed)');
+          poll();
+        } else if(res.state === 'finishing'){
+          mark('manifest', 'active');
+          note('Sign finished — publishing the install manifest…');
+          poll();
+        } else if(res.state === 'complete'){
+          mark('sign', 'done');
+          mark('manifest', 'done');
+          finish(res.plistUrl);
+        } else if(res.state === 'failed'){
+          fail(res.error || 'The sign job failed. Try again or pick another certificate.');
+        } else {
+          note('Waiting for the sign job to start…');
+          poll();
+        }
+      }).catch(function(){
+        if(dead) return;
+        note('Connection hiccup — retrying…');
+        poll();
+      });
+    }, POLL_MS);
+  }
+
+  function startSign(cert, label){
+    dead = false;
+    autoOpened = false;
+    currentCert = cert;
+    currentLabel = label;
+    startedAt = Date.now();
+    resetSteps();
+    actionsEl.hidden = true;
+    retryBtn.hidden = true;
+    installBtn.setAttribute('href', '#');
+    certEl.textContent = label;
+    titleEl.textContent = 'Installing Feather';
+    openModal();
+    mark('request', 'active');
+    note('Requesting a sign job…');
+    postJSON('/api/sign', { cert: cert }).then(function(res){
+      if(dead) return;
+      if(res.error) throw new Error(res.error);
+      if(res.state === 'complete' && res.reused){
+        mark('request', 'done');
+        mark('sign', 'done');
+        mark('manifest', 'done');
+        note('This certificate already has a signed build — reusing it.');
+        finish(res.plistUrl);
+      } else if(res.state === 'running'){
+        mark('request', 'done');
+        mark('sign', 'active');
+        note('A sign job for this certificate is already running — waiting for it…');
+        poll();
+      } else if(res.state === 'started'){
+        mark('request', 'done');
+        mark('sign', 'active');
+        note('Sign job started on GitHub Actions — signing Feather.ipa…');
+        poll();
+      } else {
+        throw new Error('Unexpected response from the server.');
+      }
+    }).catch(function(err){
+      if(!dead) fail(err && err.message ? err.message : 'Could not start the sign job.');
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    var a = e.target.closest ? e.target.closest('a[data-cert]') : null;
+    if(!a) return;
+    /* Respect the TOS gate even for keyboard activation. */
+    var tos = document.getElementById('tosCheck');
+    if(tos && !tos.checked) return;
+    e.preventDefault();
+    startSign(a.getAttribute('data-cert'), a.getAttribute('data-label') || a.getAttribute('data-cert'));
+  }, true);
+
+  retryBtn.addEventListener('click', function(){
+    startSign(currentCert, currentLabel);
+  });
+
+  [].forEach.call(modal.querySelectorAll('[data-sign-close]'), function(el){
+    el.addEventListener('click', closeModal);
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && !modal.hidden) closeModal();
+  });
 })();
 </script>
 
